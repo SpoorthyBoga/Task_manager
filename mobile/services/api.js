@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ⚠️ REPLACE WITH YOUR LAPTOP'S LOCAL IP ADDRESS (Do not use localhost)
-const API_URL = 'https://task-manager-4q6p.onrender.com'; 
+const API_URL = 'https://task-manager-4q6p.onrender.com/api'; 
 
 const api = axios.create({
     baseURL: API_URL,
