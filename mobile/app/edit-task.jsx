@@ -3,12 +3,11 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, ScrollView, Platform
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 
-// ─── Design Tokens (shared across screens) ──────────────────────────────────
 const T = {
   bg: '#F7F6F2',
   surface: '#FFFFFF',
@@ -20,14 +19,15 @@ const T = {
   textLight: '#B0ADA4',
   accent: '#2D5BE3',
   accentSoft: '#EBF0FD',
-  green: '#1A9B6C',
   red: '#C23B3B',
   redSoft: '#FCEAEA',
+  amber: '#C07C1A',
+  amberSoft: '#FDF3E0',
   radius: { sm: 8, md: 12, lg: 18, xl: 24 },
   font: { xs: 11, sm: 13, base: 15, md: 16, lg: 20, xl: 26 },
 };
 
-function FormField({ label, required, children }) {
+function FieldRow({ label, required, children }) {
   return (
     <View style={styles.fieldGroup}>
       <View style={styles.labelRow}>
@@ -39,58 +39,90 @@ function FormField({ label, required, children }) {
   );
 }
 
-export default function CreateTaskScreen() {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [assignedTo, setAssignedTo] = useState('');
+export default function EditTaskScreen() {
+  const params = useLocalSearchParams();
+  const [title, setTitle] = useState(params.title || '');
+  const [description, setDescription] = useState(params.description || '');
+  const [assignedTo, setAssignedTo] = useState(params.assignedTo || '');
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [titleFocused, setTitleFocused] = useState(false);
-  const [descFocused, setDescFocused] = useState(false);
+  const [focused, setFocused] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
 
-  useEffect(() => { fetchUsers(); }, []);
+  const originalTitle = params.title || '';
+  const originalDesc = params.description || '';
+  const originalAssignee = params.assignedTo || '';
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    setHasChanges(
+      title !== originalTitle ||
+      description !== originalDesc ||
+      assignedTo !== originalAssignee
+    );
+  }, [title, description, assignedTo]);
 
   const fetchUsers = async () => {
     try {
       const response = await api.get('/auth/users');
       setUsers(response.data);
-      if (response.data.length > 0) setAssignedTo(response.data[0]._id);
     } catch {
-      Alert.alert('Error', 'Could not load users for assignment.');
+      Alert.alert('Error', 'Could not load users.');
     }
   };
 
-  const handleCreateTask = async () => {
+  const handleUpdateTask = async () => {
     if (!title.trim() || !assignedTo) {
       Alert.alert('Missing Fields', 'Title and Assignee are required.');
       return;
     }
     setIsLoading(true);
     try {
-      await api.post('/tasks', { title: title.trim(), description: description.trim(), assignedTo });
-      Alert.alert('Task Created', 'The task has been created successfully.', [
+      await api.patch(`/tasks/${params.id}`, {
+        title: title.trim(),
+        description: description.trim(),
+        assignedTo
+      });
+      Alert.alert('Task Updated', 'Changes saved successfully.', [
         { text: 'OK', onPress: () => router.back() }
       ]);
-    } catch (error) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to create task.');
+    } catch {
+      Alert.alert('Error', 'Failed to update task.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isValid = title.trim().length > 0 && assignedTo;
+  const handleDiscard = () => {
+    if (hasChanges) {
+      Alert.alert('Discard Changes', 'Your edits will be lost.', [
+        { text: 'Keep Editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => router.back() }
+      ]);
+    } else {
+      router.back();
+    }
+  };
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleDiscard}>
           <Ionicons name="arrow-back" size={20} color={T.text} />
         </TouchableOpacity>
-        <View>
-          <Text style={styles.heading}>New Task</Text>
-          <Text style={styles.subheading}>Fill in the details below</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.heading}>Edit Task</Text>
+          <Text style={styles.subheading} numberOfLines={1}>{originalTitle}</Text>
         </View>
+        {hasChanges && (
+          <View style={styles.changedBadge}>
+            <Text style={styles.changedText}>Unsaved</Text>
+          </View>
+        )}
       </View>
 
       <ScrollView
@@ -99,37 +131,36 @@ export default function CreateTaskScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <FormField label="Task Title" required>
+        <FieldRow label="Task Title" required>
           <TextInput
-            style={[styles.input, titleFocused && styles.inputFocused]}
-            placeholder="e.g. Update landing page copy"
-            placeholderTextColor={T.textLight}
+            style={[styles.input, focused === 'title' && styles.inputFocused]}
             value={title}
             onChangeText={setTitle}
-            onFocus={() => setTitleFocused(true)}
-            onBlur={() => setTitleFocused(false)}
+            placeholder="Task title"
+            placeholderTextColor={T.textLight}
+            onFocus={() => setFocused('title')}
+            onBlur={() => setFocused('')}
             returnKeyType="next"
           />
-        </FormField>
+        </FieldRow>
 
-        <FormField label="Description">
+        <FieldRow label="Description">
           <TextInput
-            style={[styles.input, styles.textarea, descFocused && styles.inputFocused]}
-            placeholder="Add any additional context or notes…"
-            placeholderTextColor={T.textLight}
+            style={[styles.input, styles.textarea, focused === 'desc' && styles.inputFocused]}
             value={description}
             onChangeText={setDescription}
-            onFocus={() => setDescFocused(true)}
-            onBlur={() => setDescFocused(false)}
+            placeholder="Add context or notes…"
+            placeholderTextColor={T.textLight}
+            onFocus={() => setFocused('desc')}
+            onBlur={() => setFocused('')}
             multiline
-            numberOfLines={4}
             textAlignVertical="top"
           />
-        </FormField>
+        </FieldRow>
 
-        <FormField label="Assign To" required>
+        <FieldRow label="Assign To" required>
           <View style={styles.pickerBox}>
-            <Ionicons name="person-circle-outline" size={18} color={T.textMuted} style={styles.pickerIcon} />
+            <Ionicons name="person-circle-outline" size={18} color={T.textMuted} />
             <Picker
               selectedValue={assignedTo}
               onValueChange={setAssignedTo}
@@ -144,26 +175,35 @@ export default function CreateTaskScreen() {
               ))}
             </Picker>
           </View>
-        </FormField>
+        </FieldRow>
 
-        {/* Actions */}
+        {/* Change Summary */}
+        {hasChanges && (
+          <View style={styles.diffHint}>
+            <Ionicons name="information-circle-outline" size={15} color={T.amber} />
+            <Text style={styles.diffHintText}>You have unsaved changes</Text>
+          </View>
+        )}
+
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.primaryBtn, !isValid && styles.primaryBtnDisabled]}
-            onPress={handleCreateTask}
-            disabled={isLoading || !isValid}
+            style={[styles.primaryBtn, (!hasChanges || !title.trim()) && styles.primaryBtnDisabled]}
+            onPress={handleUpdateTask}
+            disabled={isLoading || !hasChanges || !title.trim()}
           >
             {isLoading
               ? <ActivityIndicator color={T.surface} />
               : <>
-                  <Ionicons name="checkmark" size={18} color={T.surface} />
-                  <Text style={styles.primaryBtnText}>Create Task</Text>
+                  <Ionicons name="save-outline" size={17} color={T.surface} />
+                  <Text style={styles.primaryBtnText}>Save Changes</Text>
                 </>
             }
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
+          <TouchableOpacity style={styles.cancelBtn} onPress={handleDiscard}>
+            <Text style={styles.cancelBtnText}>
+              {hasChanges ? 'Discard Changes' : 'Cancel'}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -175,16 +215,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: T.bg, paddingTop: Platform.OS === 'ios' ? 56 : 36 },
 
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 20, marginBottom: 28,
   },
   backBtn: {
-    width: 40, height: 40, borderRadius: T.radius.md,
+    width: 40, height: 40, borderRadius: T.radius.md, flexShrink: 0,
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
     justifyContent: 'center', alignItems: 'center',
   },
   heading: { fontSize: T.font.lg, fontWeight: '800', color: T.text, letterSpacing: -0.5 },
   subheading: { fontSize: T.font.sm, color: T.textMuted, marginTop: 1 },
+  changedBadge: {
+    backgroundColor: T.amberSoft, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 99, borderWidth: 1, borderColor: T.amber + '55',
+  },
+  changedText: { fontSize: T.font.xs, fontWeight: '700', color: T.amber },
 
   scroll: { flex: 1 },
   scrollContent: {
@@ -195,7 +240,7 @@ const styles = StyleSheet.create({
 
   fieldGroup: { marginBottom: 20 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 8 },
-  label: { fontSize: T.font.sm, fontWeight: '700', color: T.text, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { fontSize: T.font.xs, fontWeight: '700', color: T.text, textTransform: 'uppercase', letterSpacing: 0.6 },
   required: { fontSize: T.font.sm, color: T.accent, fontWeight: '700' },
 
   input: {
@@ -212,18 +257,22 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: T.border, paddingLeft: 12,
     overflow: 'hidden',
   },
-  pickerIcon: { flexShrink: 0 },
   picker: { flex: 1, height: 52, color: T.text },
 
-  actions: { marginTop: 12, gap: 12 },
+  diffHint: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: T.amberSoft, borderRadius: T.radius.md,
+    padding: 12, marginBottom: 8, borderWidth: 1, borderColor: T.amber + '40',
+  },
+  diffHintText: { fontSize: T.font.sm, color: T.amber, fontWeight: '600' },
+
+  actions: { marginTop: 8, gap: 12 },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: T.accent, borderRadius: T.radius.md,
-    paddingVertical: 16,
+    backgroundColor: T.accent, borderRadius: T.radius.md, paddingVertical: 16,
   },
-  primaryBtnDisabled: { opacity: 0.45 },
+  primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: { color: T.surface, fontSize: T.font.md, fontWeight: '700' },
-
   cancelBtn: { alignItems: 'center', paddingVertical: 14 },
   cancelBtnText: { color: T.textMuted, fontSize: T.font.base, fontWeight: '600' },
 });

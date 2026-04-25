@@ -38,21 +38,44 @@ router.get('/', protect, async (req, res) => {
 });
 
 // 3. UPDATE TASK STATUS (Admin and assigned User)
+// 3. UPDATE TASK (Status, Title, Description)
 router.patch('/:id', protect, async (req, res) => {
     try {
-        const { status } = req.body;
+        const { status, title, description, assignedTo } = req.body;
         const task = await Task.findById(req.params.id);
 
         if (!task) return res.status(404).json({ message: 'Task not found' });
 
-        // Security: Check if user is Admin OR the person the task is assigned to
+        // Security Check
         if (req.user.role !== 'Admin' && task.assignedTo.toString() !== req.user.id) {
             return res.status(403).json({ message: 'Not authorized to update this task' });
         }
 
-        task.status = status || task.status;
+        // Update fields if they are provided in the request
+        if (status) task.status = status;
+        if (title) task.title = title;
+        if (description) task.description = description;
+        
+        // Only Admin can reassign tasks
+        if (assignedTo && req.user.role === 'Admin') task.assignedTo = assignedTo;
+
         await task.save();
         res.json(task);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE TASK (Admin Only)
+router.delete('/:id', protect, authorize('Admin'), async (req, res) => {
+    try {
+        const task = await Task.findByIdAndDelete(req.params.id);
+        
+        if (!task) {
+            return res.status(404).json({ message: 'Task not found' });
+        }
+        
+        res.json({ message: 'Task deleted successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
