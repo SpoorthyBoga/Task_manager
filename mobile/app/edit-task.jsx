@@ -109,11 +109,18 @@ export default function EditTaskScreen() {
             </View>
           </View>
 
+          {/* --- UPDATED: iOS Picker Fix --- */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Assign To *</Text>
-            <View style={styles.inputBox}>
+            <View style={[styles.inputBox, Platform.OS === 'ios' && { height: 120 }]}>
               <Ionicons name="person-circle-outline" size={20} color={THEME.textMuted} />
-              <Picker selectedValue={assignedTo} onValueChange={setAssignedTo} style={styles.picker} dropdownIconColor={THEME.text}>
+              <Picker 
+                selectedValue={assignedTo} 
+                onValueChange={setAssignedTo} 
+                style={styles.picker} 
+                dropdownIconColor={THEME.text}
+                itemStyle={Platform.OS === 'ios' ? { height: 120, fontSize: 16, color: THEME.text } : {}}
+              >
                 {users.map(u => <Picker.Item key={u._id} label={`${u.name} (${u.role})`} value={u._id} />)}
               </Picker>
             </View>

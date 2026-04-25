@@ -7,7 +7,6 @@ import {
 import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
 import { router, Redirect, useFocusEffect } from 'expo-router';
-import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { THEME, STATUS_CONFIG } from '../constants/theme';
 import { dashboardStyles as styles } from '../styles/dashboard.styles';
@@ -80,6 +79,17 @@ export default function DashboardScreen() {
     inProgress: tasks.filter(t => t.status === 'In Progress').length,
   }), [tasks]);
 
+  // --- NEW: Tap-to-Cycle Status Handler ---
+  const handleStatusToggle = (task) => {
+    const nextStatus = {
+      'Not Started': 'In Progress',
+      'In Progress': 'Done',
+      'Done': 'Not Started'
+    }[task.status] || 'Not Started';
+
+    api.patch(`/tasks/${task._id}`, { status: nextStatus }).then(fetchTasks);
+  };
+
   const handleDeleteTask = async (taskId) => {
     const deleteApiCall = async () => {
       try {
@@ -120,14 +130,17 @@ export default function DashboardScreen() {
         {item.description ? <Text style={styles.taskDesc} numberOfLines={3}>{item.description}</Text> : null}
 
         <View style={styles.cardFooter}>
-          <View style={[styles.statusPill, { borderColor: cfg.color }]}>
-            <Ionicons name={cfg.icon} size={14} color={cfg.color} style={{ marginLeft: 8 }} />
-            <Picker selectedValue={item.status} onValueChange={val => api.patch(`/tasks/${item._id}`, { status: val }).then(fetchTasks)} style={styles.picker} dropdownIconColor={cfg.color}>
-              <Picker.Item label="Not Started" value="Not Started" />
-              <Picker.Item label="In Progress" value="In Progress" />
-              <Picker.Item label="Done" value="Done" />
-            </Picker>
-          </View>
+          {/* UPDATED: Tap-to-Cycle Button instead of Picker */}
+          <TouchableOpacity 
+            style={[styles.statusPill, { borderColor: cfg.color, justifyContent: 'center' }]}
+            onPress={() => handleStatusToggle(item)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={cfg.icon} size={14} color={cfg.color} style={{ marginRight: 6 }} />
+            <Text style={{ fontSize: 12, fontWeight: '800', color: THEME.text, textTransform: 'uppercase' }}>
+              {item.status}
+            </Text>
+          </TouchableOpacity>
 
           {user.role === 'Admin' && (
             <View style={styles.actionRow}>
@@ -148,7 +161,6 @@ export default function DashboardScreen() {
   const renderUser = ({ item }) => {
     const isExpanded = expandedUserId === item._id;
     
-    // Filter tasks belonging to this user
     const userTasks = tasks.filter(t => {
       if (!t.assignedTo) return false;
       const assigneeId = typeof t.assignedTo === 'object' ? t.assignedTo._id : t.assignedTo;
@@ -172,7 +184,6 @@ export default function DashboardScreen() {
           <TouchableOpacity 
             style={[styles.iconBtn, { backgroundColor: THEME.red }]} 
             onPress={(e) => { 
-              // Prevent the card from expanding when clicking the trash can (on Web)
               if (Platform.OS === 'web') e.stopPropagation(); 
               handleDeleteUser(item._id); 
             }}
@@ -181,7 +192,6 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
 
-        {/* --- EXPANDED TASK LIST --- */}
         {isExpanded && (
           <View style={styles.userTasksContainer}>
             <Text style={styles.userTasksHeader}>Assigned Tasks ({userTasks.length})</Text>
