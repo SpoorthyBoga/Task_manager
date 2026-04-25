@@ -79,4 +79,16 @@ router.post('/admin/create-user', protect, authorize('Admin'), async (req, res) 
     }
 });
 
+// DELETE USER (Admin Only)
+router.delete('/users/:id', protect, authorize('Admin'), async (req, res) => {
+    try {
+        await User.findByIdAndDelete(req.params.id);
+        // Unassign any tasks this user had
+        await Task.updateMany({ assignedTo: req.params.id }, { $unset: { assignedTo: 1 } });
+        res.json({ message: 'User removed successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

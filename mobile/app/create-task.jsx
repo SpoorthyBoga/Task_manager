@@ -1,43 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, ScrollView, Platform
-} from 'react-native';
-import { router } from 'expo-router';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView, StatusBar } from 'react-native';
+import { router, Redirect } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
-
-// ─── Design Tokens (shared across screens) ──────────────────────────────────
-const T = {
-  bg: '#F7F6F2',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F0EEE8',
-  border: '#E4E1D8',
-  borderFocus: '#2D5BE3',
-  text: '#1C1A17',
-  textMuted: '#7A7669',
-  textLight: '#B0ADA4',
-  accent: '#2D5BE3',
-  accentSoft: '#EBF0FD',
-  green: '#1A9B6C',
-  red: '#C23B3B',
-  redSoft: '#FCEAEA',
-  radius: { sm: 8, md: 12, lg: 18, xl: 24 },
-  font: { xs: 11, sm: 13, base: 15, md: 16, lg: 20, xl: 26 },
-};
-
-function FormField({ label, required, children }) {
-  return (
-    <View style={styles.fieldGroup}>
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>{label}</Text>
-        {required && <Text style={styles.required}>*</Text>}
-      </View>
-      {children}
-    </View>
-  );
-}
+import { AuthContext } from '../context/AuthContext';
+import { THEME } from '../constants/theme';
+import { formStyles as styles } from '../styles/forms.styles';
 
 export default function CreateTaskScreen() {
   const [title, setTitle] = useState('');
@@ -45,8 +14,10 @@ export default function CreateTaskScreen() {
   const [assignedTo, setAssignedTo] = useState('');
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [titleFocused, setTitleFocused] = useState(false);
-  const [descFocused, setDescFocused] = useState(false);
+  const [focusedField, setFocusedField] = useState('');
+
+  // --- THE BOUNCER ---
+  const { user, isLoading: isAuthLoading } = useContext(AuthContext);
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -55,175 +26,72 @@ export default function CreateTaskScreen() {
       const response = await api.get('/auth/users');
       setUsers(response.data);
       if (response.data.length > 0) setAssignedTo(response.data[0]._id);
-    } catch {
-      Alert.alert('Error', 'Could not load users for assignment.');
-    }
+    } catch { Alert.alert('Error', 'Could not load users for assignment.'); }
   };
 
   const handleCreateTask = async () => {
-    if (!title.trim() || !assignedTo) {
-      Alert.alert('Missing Fields', 'Title and Assignee are required.');
-      return;
-    }
+    if (!title.trim() || !assignedTo) return Alert.alert('Missing Fields', 'Title and Assignee are required.');
     setIsLoading(true);
     try {
       await api.post('/tasks', { title: title.trim(), description: description.trim(), assignedTo });
-      Alert.alert('Task Created', 'The task has been created successfully.', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
-    } catch (error) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to create task.');
-    } finally {
-      setIsLoading(false);
-    }
+      router.replace('/dashboard');
+    } catch (error) { Alert.alert('Error', error.response?.data?.message || 'Failed to create task.'); } 
+    finally { setIsLoading(false); }
   };
+
+  // --- SECURITY CHECKS ---
+  if (isAuthLoading) return <View style={styles.container}><ActivityIndicator size="large" color={THEME.accent} /></View>;
+  if (!user || user.role !== 'Admin') return <Redirect href="/dashboard" />;
 
   const isValid = title.trim().length > 0 && assignedTo;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={T.text} />
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.heading}>New Task</Text>
-          <Text style={styles.subheading}>Fill in the details below</Text>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <FormField label="Task Title" required>
-          <TextInput
-            style={[styles.input, titleFocused && styles.inputFocused]}
-            placeholder="e.g. Update landing page copy"
-            placeholderTextColor={T.textLight}
-            value={title}
-            onChangeText={setTitle}
-            onFocus={() => setTitleFocused(true)}
-            onBlur={() => setTitleFocused(false)}
-            returnKeyType="next"
-          />
-        </FormField>
-
-        <FormField label="Description">
-          <TextInput
-            style={[styles.input, styles.textarea, descFocused && styles.inputFocused]}
-            placeholder="Add any additional context or notes…"
-            placeholderTextColor={T.textLight}
-            value={description}
-            onChangeText={setDescription}
-            onFocus={() => setDescFocused(true)}
-            onBlur={() => setDescFocused(false)}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </FormField>
-
-        <FormField label="Assign To" required>
-          <View style={styles.pickerBox}>
-            <Ionicons name="person-circle-outline" size={18} color={T.textMuted} style={styles.pickerIcon} />
-            <Picker
-              selectedValue={assignedTo}
-              onValueChange={setAssignedTo}
-              style={styles.picker}
-            >
-              {users.map(u => (
-                <Picker.Item
-                  key={u._id}
-                  label={`${u.name}  (${u.role})`}
-                  value={u._id}
-                />
-              ))}
-            </Picker>
+      <StatusBar barStyle="dark-content" backgroundColor={THEME.bg} />
+      <View style={styles.contentWrapper}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color={THEME.text} />
+          </TouchableOpacity>
+          <View style={styles.headerText}>
+            <Text style={styles.heading}>New Task.</Text>
+            <Text style={styles.subheading}>Assign a deliverable</Text>
           </View>
-        </FormField>
-
-        {/* Actions */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.primaryBtn, !isValid && styles.primaryBtnDisabled]}
-            onPress={handleCreateTask}
-            disabled={isLoading || !isValid}
-          >
-            {isLoading
-              ? <ActivityIndicator color={T.surface} />
-              : <>
-                  <Ionicons name="checkmark" size={18} color={T.surface} />
-                  <Text style={styles.primaryBtnText}>Create Task</Text>
-                </>
-            }
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
         </View>
-      </ScrollView>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Task Title *</Text>
+            <View style={[styles.inputBox, focusedField === 'title' && styles.inputBoxFocused]}>
+              <TextInput style={styles.inputInner} placeholder="e.g. Update landing page copy" placeholderTextColor={THEME.textMuted} value={title} onChangeText={setTitle} onFocus={() => setFocusedField('title')} onBlur={() => setFocusedField('')} returnKeyType="next" />
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Description</Text>
+            <View style={[styles.inputBox, styles.textareaBox, focusedField === 'desc' && styles.inputBoxFocused]}>
+              <TextInput style={[styles.inputInner, styles.textareaInner]} placeholder="Add any context or notes…" placeholderTextColor={THEME.textMuted} value={description} onChangeText={setDescription} onFocus={() => setFocusedField('desc')} onBlur={() => setFocusedField('')} multiline numberOfLines={5} textAlignVertical="top" />
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Assign To *</Text>
+            <View style={styles.inputBox}>
+              <Ionicons name="person-circle-outline" size={20} color={THEME.textMuted} />
+              <Picker selectedValue={assignedTo} onValueChange={setAssignedTo} style={styles.picker} dropdownIconColor={THEME.text}>
+                {users.map(u => <Picker.Item key={u._id} label={`${u.name} (${u.role})`} value={u._id} />)}
+              </Picker>
+            </View>
+          </View>
+
+          <View style={styles.actions}>
+            <TouchableOpacity style={[styles.primaryBtn, !isValid && styles.primaryBtnDisabled]} onPress={handleCreateTask} disabled={isLoading || !isValid}>
+              {isLoading ? <ActivityIndicator color={THEME.surface} /> : <><Ionicons name="add" size={24} color={THEME.surface} style={{ marginRight: 6 }} /><Text style={styles.primaryBtnText}>Create Task</Text></>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}><Text style={styles.cancelBtnText}>Cancel</Text></TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: T.bg, paddingTop: Platform.OS === 'ios' ? 56 : 36 },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 20, marginBottom: 28,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: T.radius.md,
-    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  heading: { fontSize: T.font.lg, fontWeight: '800', color: T.text, letterSpacing: -0.5 },
-  subheading: { fontSize: T.font.sm, color: T.textMuted, marginTop: 1 },
-
-  scroll: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: 20, paddingBottom: 48,
-    maxWidth: 640,
-    ...(Platform.OS === 'web' ? { alignSelf: 'center', width: '100%' } : {}),
-  },
-
-  fieldGroup: { marginBottom: 20 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 8 },
-  label: { fontSize: T.font.sm, fontWeight: '700', color: T.text, textTransform: 'uppercase', letterSpacing: 0.5 },
-  required: { fontSize: T.font.sm, color: T.accent, fontWeight: '700' },
-
-  input: {
-    backgroundColor: T.surface, padding: 14,
-    borderRadius: T.radius.md, borderWidth: 1.5, borderColor: T.border,
-    fontSize: T.font.base, color: T.text,
-  },
-  inputFocused: { borderColor: T.borderFocus },
-  textarea: { height: 110, textAlignVertical: 'top', paddingTop: 14 },
-
-  pickerBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: T.surface, borderRadius: T.radius.md,
-    borderWidth: 1.5, borderColor: T.border, paddingLeft: 12,
-    overflow: 'hidden',
-  },
-  pickerIcon: { flexShrink: 0 },
-  picker: { flex: 1, height: 52, color: T.text },
-
-  actions: { marginTop: 12, gap: 12 },
-  primaryBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: T.accent, borderRadius: T.radius.md,
-    paddingVertical: 16,
-  },
-  primaryBtnDisabled: { opacity: 0.45 },
-  primaryBtnText: { color: T.surface, fontSize: T.font.md, fontWeight: '700' },
-
-  cancelBtn: { alignItems: 'center', paddingVertical: 14 },
-  cancelBtnText: { color: T.textMuted, fontSize: T.font.base, fontWeight: '600' },
-});
