@@ -9,8 +9,6 @@ import { AuthContext } from '../context/AuthContext';
 import { THEME } from '../constants/theme';
 import { loginStyles as styles } from '../styles/login.styles';
 
-// Inlined High-Contrast "Startup" Theme
-
 const isWeb = Platform.OS === 'web';
 
 export default function LoginScreen() {

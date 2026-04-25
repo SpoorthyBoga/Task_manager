@@ -1,67 +1,117 @@
-# TaskFlow
+# Task Manager
 
-A full-stack task management app with a Node.js/Express REST API and a React Native (Expo) mobile client.
+A full-stack task management app built with a React Native (Expo) mobile/web frontend and a Node.js/Express REST API backend, backed by MongoDB.
 
 ---
 
 ## Project Structure
 
 ```
-taskflow/
-├── backend/          # Express API + MongoDB
+/
+├── backend/          # Express REST API
 │   ├── middleware/   # JWT auth middleware
 │   ├── models/       # Mongoose schemas (User, Task)
-│   ├── routes/       # auth.js, tasks.js
-│   ├── .env          # Environment variables (not committed)
+│   ├── routes/       # Auth and task route handlers
 │   └── server.js     # Entry point
-└── mobile/           # Expo React Native app
-    ├── app/          # Expo Router screens
-    ├── components/   # Shared UI components (FormField)
-    ├── constants/    # Design tokens (theme.ts)
-    ├── context/      # AuthContext (login/logout/session)
+└── mobile/           # Expo (React Native) app
+    ├── app/          # File-based routes (expo-router)
+    ├── context/      # AuthContext (global auth state)
     ├── services/     # Axios API client
-    └── styles/       # Shared StyleSheet (shared.ts)
+    ├── styles/       # StyleSheet modules
+    └── constants/    # Theme tokens
 ```
 
 ---
 
 ## Features
 
-**Authentication**
-- JWT-based login with token stored in AsyncStorage
-- Role-based access: `Admin` and `User`
-- Auto-redirect on session restore
+### Authentication
+- Email/password login with JWT tokens (1-day expiry)
+- Passwords hashed with bcryptjs (salt rounds: 10)
+- Token persisted in AsyncStorage and auto-attached to every request via an Axios interceptor
+- Session restored on app launch — no re-login needed unless token is cleared
+- Protected routes redirect unauthenticated users to the login screen
 
-**Task Management**
-- Admins can create, edit, delete, and reassign tasks
-- Users can view their assigned tasks and update status
-- Status options: `Not Started`, `In Progress`, `Done`
-- Inline status picker on each task card
+### Role-Based Access Control
+Two roles exist: `Admin` and `User`. Access is enforced on both the API and the frontend.
 
-**Dashboard**
-- Stats bar showing total / in-progress / done counts
-- Live search and filter tabs
-- Pull-to-refresh
-- Responsive 2-column layout on web
+| Action | Admin | User |
+|---|---|---|
+| View all tasks | ✅ | ❌ (own tasks only) |
+| Create task | ✅ | ❌ |
+| Edit task (title, desc, assignee) | ✅ | ❌ |
+| Update task status | ✅ | ✅ (own tasks) |
+| Delete task | ✅ | ❌ |
+| View team members | ✅ | ❌ |
+| Create user | ✅ | ❌ |
+| Delete user | ✅ | ❌ |
 
-**User Management (Admin only)**
-- Create new users with name, email, password, and role
-- Live avatar preview while typing
+### Dashboard
+- Stats bar showing total, in-progress, and completed task counts
+- Search tasks by title (live filter)
+- Filter tabs: All / Not Started / In Progress / Done
+- Pull-to-refresh on both tasks and users lists
+- Admins get a toggle to switch between the Tasks view and Team Members view
+- Web layout renders tasks in a 2-column grid; mobile uses a single column
+- Empty state illustration when no tasks match the current filter
+
+### Task Management (Admin)
+- Create tasks with a title, optional description, and assignee (picked from a user dropdown)
+- Edit task title, description, and assignee — an "UNSAVED" badge appears when there are pending changes
+- Discard-changes confirmation dialog before navigating away from an edited task
+- Inline status picker on each task card (Not Started / In Progress / Done) — updates immediately via PATCH
+- Delete tasks with a confirmation prompt (uses `window.confirm` on web, `Alert` on native)
+- Task cards cycle through three background colors for visual distinction
+- Assignee initial avatar shown on each card
+
+### User Management (Admin)
+- Create new users with name, email, password, and role selection (User or Admin)
+- Live avatar preview showing initials as the name is typed
+- Role picker uses a card-based UI with icons and descriptions
+- View all team members in an expandable list — tap a user card to see their assigned tasks inline
+- Delete users (also unassigns their tasks on the backend)
+
+### Task View (Regular User)
+- Sees only tasks assigned to them
+- Can update the status of their own tasks via the inline picker
+- No access to create/edit/delete task or user screens (redirected away if navigated directly)
 
 ---
 
-## Prerequisites
+## Tech Stack
 
-- Node.js 18+
-- MongoDB (local or Atlas)
-- Expo CLI (`npm install -g expo-cli`)
-- iOS Simulator, Android Emulator, or Expo Go on a physical device
+### Backend
+| Package | Purpose |
+|---|---|
+| Express 4 | HTTP server and routing |
+| Mongoose 9 | MongoDB ODM |
+| bcryptjs | Password hashing |
+| jsonwebtoken | JWT creation and verification |
+| cors | Cross-origin request handling |
+| dotenv | Environment variable loading |
+
+### Mobile / Frontend
+| Package | Purpose |
+|---|---|
+| Expo SDK 54 | Build toolchain and native APIs |
+| expo-router 6 | File-based navigation |
+| React Native 0.81 | UI framework |
+| Axios | HTTP client |
+| @react-native-async-storage/async-storage | Token/session persistence |
+| @react-native-picker/picker | Dropdown selectors |
+| @expo/vector-icons (Ionicons) | Icon set |
+| react-native-reanimated | Animation support |
 
 ---
 
 ## Getting Started
 
-### 1. Backend
+### Prerequisites
+- Node.js 18+
+- MongoDB instance (local or Atlas)
+- Expo CLI (`npm install -g expo-cli`) or use `npx expo`
+
+### Backend Setup
 
 ```bash
 cd backend
@@ -71,80 +121,88 @@ npm install
 Create a `.env` file:
 
 ```env
-MONGO_URI=mongodb://localhost:27017/taskflow
-JWT_SECRET=your_jwt_secret_here
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret
 PORT=5000
 ```
 
 Start the server:
 
 ```bash
-npm start          # production
-npm run dev        # with nodemon (install nodemon separately if needed)
+# Development (with nodemon)
+npm run dev
+
+# Production
+npm start
 ```
 
 The API will be available at `http://localhost:5000`.
 
-### 2. Mobile
+### Mobile Setup
 
 ```bash
 cd mobile
 npm install
 ```
 
-Open `mobile/services/api.js` and update `API_URL` to your machine's local IP address (not `localhost`):
+Update the API base URL in `mobile/services/api.js` to your machine's local IP (not `localhost` — the device/emulator can't reach it):
 
 ```js
-const API_URL = 'http://YOUR_LOCAL_IP:5000/api';
+const API_URL = 'http://<YOUR_LOCAL_IP>:5000/api';
 ```
 
 Start the Expo dev server:
 
 ```bash
-npm start
+npx expo start
 ```
 
-Then press `i` for iOS, `a` for Android, or `w` for web.
+Then press `a` for Android, `i` for iOS, or `w` for web.
 
 ---
 
 ## API Reference
 
-### Auth
+### Auth — `/api/auth`
 
-| Method | Endpoint                    | Auth     | Description              |
-|--------|-----------------------------|----------|--------------------------|
-| POST   | `/api/auth/register`        | None     | Register a new user      |
-| POST   | `/api/auth/login`           | None     | Login, returns JWT token |
-| GET    | `/api/auth/users`           | None     | List all users           |
-| POST   | `/api/auth/admin/create-user` | Admin  | Admin creates a user     |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/register` | None | Register a new user |
+| POST | `/login` | None | Login and receive a JWT |
+| GET | `/users` | None | List all users (no passwords) |
+| POST | `/admin/create-user` | Admin | Create a user as an admin |
+| DELETE | `/users/:id` | Admin | Delete a user and unassign their tasks |
 
-### Tasks
+### Tasks — `/api/tasks`
 
-| Method | Endpoint          | Auth       | Description                        |
-|--------|-------------------|------------|------------------------------------|
-| POST   | `/api/tasks`      | Admin      | Create a task                      |
-| GET    | `/api/tasks`      | Any        | Get tasks (Admin: all, User: own)  |
-| PATCH  | `/api/tasks/:id`  | Any        | Update task (Admin: full, User: status only) |
-| DELETE | `/api/tasks/:id`  | Admin      | Delete a task                      |
-
----
-
-## Environment Variables
-
-| Variable    | Description                        |
-|-------------|------------------------------------|
-| `MONGO_URI` | MongoDB connection string          |
-| `JWT_SECRET`| Secret key for signing JWT tokens  |
-| `PORT`      | Port for the Express server (default: 5000) |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/` | Admin | Create a new task |
+| GET | `/` | Any | Get tasks (all for Admin, own for User) |
+| PATCH | `/:id` | Any | Update task fields (reassign: Admin only) |
+| DELETE | `/:id` | Admin | Delete a task |
 
 ---
 
-## Tech Stack
+## Data Models
 
-| Layer    | Technology                                      |
-|----------|-------------------------------------------------|
-| Backend  | Node.js, Express 5, Mongoose, bcryptjs, JWT     |
-| Mobile   | React Native, Expo (SDK 54), Expo Router        |
-| Storage  | MongoDB, AsyncStorage (mobile session)          |
-| HTTP     | Axios with request interceptor for auth headers |
+### User
+```js
+{
+  name:     String (required),
+  email:    String (required, unique),
+  password: String (hashed),
+  role:     'Admin' | 'User' (default: 'User')
+}
+```
+
+### Task
+```js
+{
+  title:       String (required),
+  description: String,
+  status:      'Not Started' | 'In Progress' | 'Done' (default: 'Not Started'),
+  assignedTo:  ObjectId → User (required),
+  createdBy:   ObjectId → User
+}
+```

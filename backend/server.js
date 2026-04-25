@@ -9,7 +9,7 @@ const taskRoutes = require('./routes/tasks');
 const app = express();
 
 const corsOptions = {
-  origin: '*',
+  origin: '*', // For production, you should eventually change this to your exact Vercel frontend URL
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
